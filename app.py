@@ -3,13 +3,34 @@ from torchvision import transforms
 from PIL import Image
 import gradio as gr
 import numpy as np
+from DPN import DPN
+
+
+def DPN92(n_class=35):
+    cfg = {
+        "group": 32,
+        "in_channel": 64,
+        "mid_channels": (96, 192, 384, 768),
+        "out_channels": (256, 512, 1024, 2048),
+        "dense_channels": (16, 32, 24, 128),
+        "num": (3, 4, 20, 3),
+        "classes": n_class
+    }
+    return DPN(cfg)
+
+
+# 初始化类别名称
+labels_list = []  # 创建一个空列表来存储 labels
+with open('labels.txt', 'r', encoding='gbk') as f:
+    for line in f:
+        label = line.strip()  # 去除行首尾的空白字符
+        labels_list.append(label)  # 将 label 添加到列表中
 
 
 class Cultural_relicscls:
-    def __init__(self, model_pth='place365.pth'):
+    def __init__(self, model_pth='model.pth'):
         # 初始化模型
-        network = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18')
-        network.fc = torch.nn.Linear(512, 365)
+        network = DPN92()
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         network.load_state_dict(torch.load(model_pth, map_location=device))
         self.model = network
@@ -23,16 +44,6 @@ class Cultural_relicscls:
             transforms.Normalize(mean=[127.5], std=[127.5])
         ])
 
-        # 初始化类别名称
-        self.id2categories_name = dict()
-        with open('categories_places365.txt') as f:
-            lines = f.readlines()
-            for line in lines:
-                category_name, id = line.split(' ')
-                id = int(id)
-                category_name = category_name[3:]
-                self.id2categories_name[id] = category_name
-
     def predict(self, img, top_n=5):
         # 如果图像是numpy.ndarray类型，将其转换为PIL Image
         if isinstance(img, np.ndarray):
@@ -42,21 +53,10 @@ class Cultural_relicscls:
         out = self.model(img)
         out = torch.nn.functional.softmax(out, dim=1)
         score, label = torch.topk(out[0], k=5)
-        return {self.id2categories_name[int(c)]: float(s) for c, s in zip(label, score)}
+        return {labels_list[int(c)]: float(s) for c, s in zip(label, score)}
 
 
-"""
-        label = np.argsort(out)[-top_n:][::-1]
-        top_labels=dict()
-        for c in label:
-            c=int(c)
-            c_name=self.id2categories_name[c]
-            score=float(out[c])
-            top_labels[c_name]=score
-        return top_labels
-"""
-
-cls_model = Place365cls()
+cls_model = Cultural_relicscls()
 
 
 def predict(image):
@@ -67,6 +67,6 @@ def predict(image):
 if __name__ == "__main__":
     interface = gr.Interface(fn=predict, inputs="image",
                              outputs=gr.Label(),
-                             title="Place365 classification"
+                             title="Cultural relics classification"
                              )
     interface.launch()
